@@ -1,1 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tetris Game</title>
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #222;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        #main-menu, #instructions-modal, #stake-menu {
+            display: block;
+            text-align: center;
+        }
+        canvas {
+            display: none;
+            border: 1px solid #fff;
+        }
+        .button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .button:hover {
+            background-color: #45a049;
+        }
+        /* D-pad styling */
+        .dpad-container {
+            display: none;
+            margin-top: 20px;
+            text-align: center;
+        }
+        .dpad-button {
+            width: 60px;
+            height: 60px;
+            margin: 5px;
+            background-color: #444;
+            color: white;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        /* Rotate button */
+        .rotate-button {
+            width: 60px;
+            height: 60px;
+            margin: 5px;
+            background-color: #444;
+            color: white;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+        }
+        /* Input for stake amount */
+        .stake-input {
+            margin-top: 20px;
+            padding: 10px;
+            font-size: 16px;
+            width: 150px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
 
+    <!-- Main Menu -->
+    <div id="main-menu">
+        <h1 style="color: white;">Tetris Game</h1>
+        <button id="start-game" class="button">Start Game</button>
+        <button id="instructions" class="button">Instructions</button>
+        <button id="stake-menu-button" class="button">Stake Tokens</button>
+    </div>
+
+    <!-- Game Area -->
+    <canvas id="tetris"></canvas>
+
+    <!-- D-pad -->
+    <div id="dpad" class="dpad-container">
+        <div>
+            <button class="dpad-button" id="left">←</button>
+            <button class="dpad-button" id="right">→</button>
+        </div>
+        <div>
+            <button class="dpad-button" id="down">↓</button>
+        </div>
+        <!-- Rotate button -->
+        <div>
+            <button class="rotate-button" id="rotate">↻</button>
+        </div>
+    </div>
+
+    <!-- Instructions Modal -->
+    <div id="instructions-modal" style="display:none; background: rgba(0, 0, 0, 0.7); color: white; padding: 20px;">
+        <h2>Instructions</h2>
+        <p>Use the D-pad to control the blocks and clear rows.</p>
+        <button id="close-instructions" class="button">Close</button>
+    </div>
+
+    <!-- Stake Menu -->
+    <div id="stake-menu" style="display:none; background: rgba(0, 0, 0, 0.7); color: white; padding: 20px;">
+        <h2>Stake Tokens</h2>
+        <!-- Stake amount input -->
+        <input type="number" id="stake-amount" class="stake-input" placeholder="Amount" min="1" step="1">
+        <button id="stake-tokens" class="button">Stake Tokens</button>
+        <button id="unstake-tokens" class="button">Unstake Tokens</button>
+        <button id="back-to-main-menu" class="button">Back to Main Menu</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('tetris');
+        const context = canvas.getContext('2d');
+
+        // Game variables
+        let gameOver = false;
+        let currentPiece = generatePiece();
+        let grid = Array.from({ length: 20 }, () => Array(10).fill(null));
+        let score = 0;
+        let dropSpeed = 1000;  // Initial drop speed (in milliseconds)
+        let lastDropTime = 0;  // Track the last time the piece dropped
+        let stakeAmount = 0;  // Store the stake amount
+
+        // Set canvas dimensions to fit the screen
+        function resizeCanvas() {
+            const width = window.innerWidth * 0.9;
+            const height = window.innerHeight * 0.7;
+            canvas.width = Math.min(width, 300);  // Max width 300px
+            canvas.height = Math.min(height, 600);  // Max height 600px
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();  // Initial canvas resize
+
+        // Start the game
+        function startGame() {
+            document.getElementById('main-menu').style.display = 'none';  // Hide the main menu
+            document.getElementById('tetris').style.display = 'block';  // Show the game canvas
+            document.getElementById('dpad').style.display = 'block';  // Show the D-pad
+            gameOver = false;
+            score = 0;
+            grid = Array.from({ length: 20 }, () => Array(10).fill(null));
+            currentPiece = generatePiece();
+            lastDropTime = Date.now();  // Initialize the drop timer
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (gameOver) {
+                context.fillStyle = 'black';
+                context.globalAlpha = 0.7;
+                context.fillRect(0, canvas.height / 2 - 50, canvas.width, 100);
+                context.globalAlpha = 1;
+                context.fillStyle = 'white';
+                context.font = '30px Arial';
+                context.fillText('Game Over!', canvas.width / 2 - 80, canvas.height / 2);
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastDropTime > dropSpeed) {
+                currentPiece.y += 1;
+                if (collides()) {
+                    currentPiece.y -= 1;
+                    placePiece();
+                }
+                lastDropTime = now;  // Update the last drop time
+            }
+
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            drawGrid();
+            drawPiece(currentPiece);
+            drawScore();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // D-pad control handling (left, right, down)
+        document.getElementById('left').addEventListener('click', function() {
+            currentPiece.x -= 1;
+            if (!collides()) {
+                updateGame();
+            } else {
+                currentPiece.x += 1;  // Revert move if collision occurs
+            }
+        });
+
+        document.getElementById('right').addEventListener('click', function() {
+            currentPiece.x += 1;
+            if (!collides()) {
+                updateGame();
+            } else {
+                currentPiece.x -= 1;  // Revert move if collision occurs
+            }
+        });
+
+        document.getElementById('down').addEventListener('click', function() {
+            currentPiece.y += 1;
+            if (!collides()) {
+                updateGame();
+            } else {
+                currentPiece.y -= 1;  // Revert move if collision occurs
+                placePiece();
+            }
+        });
+
+        // Rotate button functionality
+        document.getElementById('rotate').addEventListener('click', function() {
+            rotatePiece();
+            if (!collides()) {
+                updateGame();
+            } else {
+                rotatePiece(true);  // Revert rotation if collision occurs
+            }
+        });
+
+        // Stake tokens
+        document.getElementById('stake-tokens').addEventListener('click', function() {
+            const amount = parseInt(document.getElementById('stake-amount').value);
+            if (amount > 0) {
+                stakeAmount = amount;
+                alert(`Staked  tokens!`);
+            } else {
+                alert('Please enter a valid stake amount.');
+            }
+        });
+
+        // Unstake tokens
+        document.getElementById('unstake-tokens').addEventListener('click', function() {
+            if (stakeAmount > 0) {
+                alert(`Unstaked  tokens!`);
+                stakeAmount = 0;
+            } else {
+                alert('No tokens staked.');
+            }
+        });
+
+        // Check for collision with the grid or other pieces
+        function collides() {
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x] === 1) {
+                        const newX = currentPiece.x + x;
+                        const newY = currentPiece.y + y;
+                        if (newX < 0 || newX >= 10 || newY >= 20 || grid[newY][newX]) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Place the piece on the grid and clear lines
+        function placePiece() {
+            for (let y = 0; y < currentPiece.shape.length; y++) {
+                for (let x = 0; x < currentPiece.shape[y].length; x++) {
+                    if (currentPiece.shape[y][x] === 1) {
+                        grid[currentPiece.y + y][currentPiece.x + x] = currentPiece.color;
+                    }
+                }
+            }
+            clearLines();
+            currentPiece = generatePiece();
+            if (collides()) {
+                gameOver = true;
+            }
+        }
+
+        // Clear full lines and update the grid
+        function clearLines() {
+            for (let y = 0; y < 20; y++) {
+                if (grid[y].every(cell => cell !== null)) {
+                    grid.splice(y, 1);
+                    grid.unshift(Array(10).fill(null));
+                    score += 100; // Add score for clearing a line
+                }
+            }
+        }
+
+        // Generate random piece
+        function generatePiece() {
+            const shapes = [
+                [[1, 1, 1, 1]], // I
+                [[1, 1], [1, 1]], // O
+                [[0, 1, 0], [1, 1, 1]], // T
+                [[1, 1, 0], [0, 1, 1]], // S
+                [[0, 1, 1], [1, 1, 0]]  // Z
+            ];
+            const randomShape = shapes[Math.floor(Math.random() * shapes.length)];
+            return {
+                shape: randomShape,
+                x: 4,
+                y: 0,
+                color: 'red' // Example color
+            };
+        }
+
+        // Draw the game grid
+        function drawGrid() {
+            for (let y = 0; y < 20; y++) {
+                for (let x = 0; x < 10; x++) {
+                    if (grid[y][x]) {
+                        context.fillStyle = grid[y][x];
+                        context.fillRect(x * 30, y * 30, 30, 30);
+                    }
+                }
+            }
+        }
+
+        // Draw the current piece
+        function drawPiece(piece) {
+            for (let y = 0; y < piece.shape.length; y++) {
+                for (let x = 0; x < piece.shape[y].length; x++) {
+                    if (piece.shape[y][x] === 1) {
+                        context.fillStyle = piece.color;
+                        context.fillRect((piece.x + x) * 30, (piece.y + y) * 30, 30, 30);
+                    }
+                }
+            }
+        }
+
+        // Update the game state
+        function updateGame() {
+            gameLoop();  // Update game loop state
+        }
+
+        // Draw the score
+        function drawScore() {
+            context.fillStyle = 'white';
+            context.font = '20px Arial';
+            context.fillText(`Score: `, 10, 30);
+        }
+
+        // Show the stake menu
+        document.getElementById('stake-menu-button').addEventListener('click', function() {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('stake-menu').style.display = 'block';
+        });
+
+        // Go back to the main menu from the stake menu
+        document.getElementById('back-to-main-menu').addEventListener('click', function() {
+            document.getElementById('stake-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+        });
+
+        // Show instructions modal
+        document.getElementById('instructions').addEventListener('click', function() {
+            document.getElementById('instructions-modal').style.display = 'block';
+        });
+
+        // Close instructions modal
+        document.getElementById('close-instructions').addEventListener('click', function() {
+            document.getElementById('instructions-modal').style.display = 'none';
+        });
+
+        // Add event listener to the Start Game button
+        document.getElementById('start-game').addEventListener('click', startGame);
+    </script>
+
+</body>
+</html>
